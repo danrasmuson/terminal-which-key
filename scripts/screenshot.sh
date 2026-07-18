@@ -28,7 +28,7 @@ NODE_BIN="${NODE:-node}"
 shoot() {
   local path="$1" out="$2" title="$3"
   echo "  rendering $out (--demo \"$path\")"
-  ZELLIJ_WHICH_KEY_CONFIG="$CONFIG" "$NODE_BIN" "$ROOT/dist/index.js" \
+  TERMINAL_WHICH_KEY_CONFIG="$CONFIG" "$NODE_BIN" "$ROOT/dist/index.js" \
     --demo "$path" \
     | freeze \
         --language ansi \

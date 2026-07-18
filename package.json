@@ -1,11 +1,11 @@
 {
-  "name": "zellij-which-key",
-  "version": "0.2.0",
-  "description": "which-key style leader-key launcher for zellij, rendered with Ink",
+  "name": "terminal-which-key",
+  "version": "0.3.0",
+  "description": "which-key style leader-key launcher for terminal multiplexers (herdr), rendered with Ink",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "zellij-which-key": "./dist/index.js"
+    "terminal-which-key": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.tsx",
@@ -13,7 +13,7 @@
     "start": "node dist/index.js",
     "prepublishOnly": "pnpm build"
   },
-  "keywords": ["zellij", "which-key", "leader", "tui", "ink"],
+  "keywords": ["herdr", "terminal", "multiplexer", "which-key", "leader", "tui", "ink"],
   "author": "Dan Rasmuson",
   "license": "MIT",
   "packageManager": "pnpm@10.20.0",

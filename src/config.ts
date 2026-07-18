@@ -15,15 +15,18 @@ import type {
  * Resolve the config file path.
  *
  * Search order:
- *   1. $ZELLIJ_WHICH_KEY_CONFIG (explicit override)
- *   2. $XDG_CONFIG_HOME/zellij-which-key/config.yaml
- *   3. ~/.config/zellij-which-key/config.yaml
+ *   1. $TERMINAL_WHICH_KEY_CONFIG (explicit override)
+ *   2. $ZELLIJ_WHICH_KEY_CONFIG (legacy override, still honored)
+ *   3. $XDG_CONFIG_HOME/terminal-which-key/config.yaml
+ *   4. ~/.config/terminal-which-key/config.yaml
  */
 export function resolveConfigPath(): string {
-	const override = process.env.ZELLIJ_WHICH_KEY_CONFIG;
+	const override =
+		process.env.TERMINAL_WHICH_KEY_CONFIG ||
+		process.env.ZELLIJ_WHICH_KEY_CONFIG;
 	if (override) return override;
 	const xdg = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-	return join(xdg, 'zellij-which-key', 'config.yaml');
+	return join(xdg, 'terminal-which-key', 'config.yaml');
 }
 
 export class ConfigError extends Error {
@@ -143,11 +146,11 @@ function normalizeAction(
 	if (r.run !== undefined) present.push('run');
 	if (r.pane !== undefined) present.push('pane');
 	if (r.tab !== undefined) present.push('tab');
-	if (r.zellij !== undefined) present.push('zellij');
+	if (r.herdr !== undefined) present.push('herdr');
 	if (present.length === 0) {
 		throw new ConfigError(
 			`entry at ${trail.join('.')} needs an action ` +
-				`(one of: run, pane, tab, zellij, keys)`,
+				`(one of: run, pane, tab, herdr, keys)`,
 			path,
 		);
 	}
@@ -187,20 +190,20 @@ function normalizeAction(
 		return { kind: 'tab', ...t } as Action;
 	}
 
-	if (r.zellij !== undefined) {
-		const args = Array.isArray(r.zellij)
-			? r.zellij
-			: typeof r.zellij === 'string'
-				? r.zellij.split(/\s+/).filter(Boolean)
+	if (r.herdr !== undefined) {
+		const args = Array.isArray(r.herdr)
+			? r.herdr
+			: typeof r.herdr === 'string'
+				? r.herdr.split(/\s+/).filter(Boolean)
 				: null;
 		if (!args || !args.every((a) => typeof a === 'string')) {
 			throw new ConfigError(
-				`entry at ${trail.join('.')}.zellij must be a string ` +
+				`entry at ${trail.join('.')}.herdr must be a string ` +
 					`or list of strings`,
 				path,
 			);
 		}
-		return { kind: 'zellij', args };
+		return { kind: 'herdr', args };
 	}
 
 	// Unreachable.

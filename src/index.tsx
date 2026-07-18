@@ -15,9 +15,9 @@ process.on('unhandledRejection', (error) => {
 	process.exit(1);
 });
 
-// zellij inherits PATH from whatever shell started its server, which often
-// misses user-local bin dirs (e.g. ~/.local/share/pnpm). Make sure the dirs
-// we care about are visible so leaf commands can be resolved.
+// A terminal multiplexer's server often inherits a thin PATH that misses
+// user-local bin dirs (e.g. ~/.local/share/pnpm). Make sure the dirs we
+// care about are visible so leaf commands can be resolved.
 function extendPath(): void {
 	const home = homedir();
 	const extra = [
@@ -38,20 +38,20 @@ function extendPath(): void {
 extendPath();
 
 function printHelp(): void {
-	console.log(`zellij-which-key — leader-key launcher for zellij
+	console.log(`terminal-which-key — leader-key launcher for terminal multiplexers (herdr)
 
 Usage:
-  zellij-which-key [--config PATH] [--demo PATH]
+  terminal-which-key [--config PATH] [--demo PATH]
 
 Options:
-  --config PATH   Path to YAML config (default: $XDG_CONFIG_HOME/zellij-which-key/config.yaml)
+  --config PATH   Path to YAML config (default: $XDG_CONFIG_HOME/terminal-which-key/config.yaml)
   --demo PATH     Print the menu at PATH (e.g. "" for root, "o" for the
                   "open" submenu) as ANSI to stdout and exit. Used by the
                   screenshot script.
   -h, --help      Show this help
 
 Env:
-  ZELLIJ_WHICH_KEY_CONFIG   Same as --config
+  TERMINAL_WHICH_KEY_CONFIG   Same as --config (ZELLIJ_WHICH_KEY_CONFIG still honored)
 
 Config format: see README.
 `);
@@ -93,7 +93,7 @@ async function main() {
 		config = loadConfig(configPath ?? resolveConfigPath());
 	} catch (err) {
 		if (err instanceof ConfigError) {
-			console.error(`zellij-which-key: ${err.message}`);
+			console.error(`terminal-which-key: ${err.message}`);
 			if (err.path) console.error(`  path: ${err.path}`);
 			process.exit(1);
 		}

@@ -1,31 +1,38 @@
-# zellij-which-key
+# terminal-which-key
 
-A small which-key style leader-key launcher for [zellij](https://zellij.dev),
-rendered with [Ink](https://github.com/vadimdemedes/ink).
+A small which-key style leader-key launcher for terminal multiplexers,
+rendered with [Ink](https://github.com/vadimdemedes/ink). Currently
+targets [herdr](https://herdr.dev) as its backing multiplexer.
 
-<p align="center">
-  <img src="./assets/demo-root.png" alt="root menu" width="540" /><br/>
-  <em>press <code>o</code> …</em><br/>
-  <img src="./assets/demo-open.png" alt="open submenu" width="540" />
-</p>
+- YAML config, one entry per key.
+- Typed leaf actions: `run` (replace the current pane), `pane` (open a
+  new pane), `tab` (open a new tab), `herdr` (arbitrary `herdr` CLI
+  call).
+- Submenus via a nested `keys:` map. Backspace pops, Esc/Ctrl+C
+  cancels.
 
-It's meant to be launched inside a **floating zellij pane** bound to a leader
-key (e.g. `Ctrl+Space`). When the user finishes typing a key sequence, the
-chosen command takes over the floating pane via stdio inheritance — so a TUI
-like `calendar-tui` simply replaces the menu, and the pane closes when the TUI
-exits.
+It's meant to be launched inside a **temporary popup pane** bound to a
+leader chord (e.g. `Ctrl+Space`) via herdr's `[[keys.command]]`
+mechanism. When you pick a leaf, that popup pane becomes the target
+command (or it dispatches to `herdr` and then exits, which closes the
+popup).
+
+> Historical note: this project used to be `zellij-which-key`. The
+> `ZELLIJ_WHICH_KEY_CONFIG` env var is still honored for legacy configs.
 
 ## Install
 
-```sh
+```bash
+git clone https://github.com/danrasmuson/terminal-which-key
+cd terminal-which-key
 pnpm install
 pnpm build
-pnpm link --global       # exposes `zellij-which-key` on PATH
+pnpm link --global       # exposes `terminal-which-key` on PATH
 ```
 
-## Configure
+## Config
 
-Drop a YAML config at `~/.config/zellij-which-key/config.yaml`:
+Drop a YAML config at `~/.config/terminal-which-key/config.yaml`:
 
 ```yaml
 title: Leader
@@ -37,90 +44,56 @@ keys:
       c:
         label: calendar
         run: calendar-tui
-```
-
-Each entry under `keys` is either a **submenu** (has nested `keys:`) or a
-**leaf** with exactly one *action* field. Inspired by
-[which-key.nvim](https://github.com/folke/which-key.nvim)'s design — the
-leaf's rhs is a typed action, not just "exec a string".
-
-### Action types
-
-| field    | shape                                | behavior                                                                 |
-| -------- | ------------------------------------ | ------------------------------------------------------------------------ |
-| `run`    | string                               | replace the (floating) which-key pane with the command (`sh -c <cmd>`)   |
-| `pane`   | string \| `{ cmd, floating?, ... }`  | open a new zellij pane via `zellij action new-pane`, close which-key pane |
-| `tab`    | string \| `{ cmd?, name?, ... }`     | open a new zellij tab via `zellij action new-tab`                        |
-| `zellij` | list of strings                      | run `zellij action <args...>` directly (detach, go-to-next-tab, ...)     |
-
-Shared optional fields on any leaf: `label`, `desc`, `cwd`.
-
-### Example
-
-```yaml
-keys:
-  o:
-    label: open
-    keys:
-      c:
-        label: calendar
-        run: calendar-tui                # take over this pane
       l:
-        label: lazygit (floating)
-        pane: { cmd: lazygit, floating: true }
-  z:
-    label: zellij
-    keys:
-      d:
-        label: detach
-        zellij: [detach]
+        label: lazygit
+        pane:
+          cmd: lazygit
+          direction: down
 ```
 
-The config path can be overridden via `--config PATH` or
-`$ZELLIJ_WHICH_KEY_CONFIG`.
+Every leaf must have **exactly one** action field:
 
-## Wire it into zellij
+| field   | value                                | behavior                                                                  |
+| ------- | ------------------------------------ | ------------------------------------------------------------------------- |
+| `run`   | string                               | replace the popup pane with the command                                   |
+| `pane`  | string \| `{ cmd, direction?, ... }` | split a new herdr pane in the current tab via `herdr pane split`          |
+| `tab`   | string \| `{ cmd?, name?, ... }`     | open a new herdr tab via `herdr tab create`                               |
+| `herdr` | list of strings                      | run `herdr <args...>` directly (session detach, tab focus, etc.)          |
 
-In `~/.config/zellij/config.kdl`, inside the `shared` block:
+Submenus have a nested `keys:` map. Each entry may set `label` and
+`desc` for the palette UI.
 
-```kdl
-bind "Ctrl Space" {
-    Run "zellij-which-key" {
-        floating true
-        hold_on_close false
-        width "70%"
-        height "60%"
-    }
-}
+See `config.example.yaml` for a fuller example.
+
+The config path can be overridden with `--config PATH` or
+`$TERMINAL_WHICH_KEY_CONFIG` (or the legacy `$ZELLIJ_WHICH_KEY_CONFIG`).
+
+## Wire it into herdr
+
+In `~/.config/herdr/config.toml`:
+
+```toml
+[[keys.command]]
+key = "ctrl+space"
+type = "pane"
+command = "terminal-which-key"
 ```
 
-Zellij doesn't hot-reload keybinds, so start a fresh session to pick the
-binding up.
+`type = "pane"` opens a temporary pane and closes it when the command
+exits — perfect popup behavior for a leader launcher.
 
-## Keys
-
-| key            | action                              |
-| -------------- | ----------------------------------- |
-| any config key | descend into submenu / run command  |
-| `backspace`    | pop one menu level                  |
-| `esc`, `ctrl+c`| cancel and close the floating pane  |
-| `q` (at root)  | cancel                              |
+If you also want a normal prefix chord (e.g. `prefix+Space`), add a
+second `[[keys.command]]` with `key = "prefix+space"`.
 
 ## Screenshots
 
-The images above are regenerated by `scripts/screenshot.sh`, which pipes the
-output of `zellij-which-key --demo <path>` (a non-interactive ANSI dump of a
-menu frame) through [charmbracelet/freeze](https://github.com/charmbracelet/freeze).
-To refresh them locally:
-
-```sh
-go install github.com/charmbracelet/freeze@latest
-pnpm build
-./scripts/screenshot.sh
-```
+`./scripts/screenshot.sh` regenerates `assets/demo-*.png` from the
+output of `terminal-which-key --demo <path>` (a non-interactive ANSI
+dump of a given menu path). Requires
+[freeze](https://github.com/charmbracelet/freeze) and a current build.
 
 ## Status
 
-v0.2 — nested submenus, YAML config, typed actions (`run` / `pane` / `tab` /
-`zellij`). `tab.cmd` is not yet wired through (zellij CLI limitation). No
-hydra-mode / hold-open behavior yet.
+Small and works for my daily use. Bindings are re-read every launch
+(no rebuild needed after config edits). Actions supported: `run`,
+`pane`, `tab`, `herdr`.

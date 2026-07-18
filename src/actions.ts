@@ -8,23 +8,24 @@ import type { Action, PaneAction, TabAction } from './types.js';
  *
  * Contract:
  *   - For `run`: spawn the command with stdio inherited. The current
- *     (floating) pane *becomes* the command. We exit with the child's exit
- *     code; the keybind has `hold_on_close false` so zellij closes the pane.
+ *     (popup) pane *becomes* the command. We exit with the child's exit
+ *     code; herdr closes the temporary pane when the command exits
+ *     (that's how `[[keys.command]] type = "pane"` popups work).
  *
- *   - For `pane`, `tab`, `zellij`: invoke `zellij action ...` to create the
- *     new pane/tab/perform the action, then exit 0. Our floating pane
- *     closes (again, `hold_on_close false`).
+ *   - For `pane`, `tab`, `herdr`: shell out to `herdr` to create the new
+ *     pane/tab/perform the action, then exit 0. Our popup pane closes
+ *     because this process itself exits.
  */
 export function dispatch(action: Action): never {
 	switch (action.kind) {
 		case 'run':
 			return execRun(action.cmd, action.cwd);
 		case 'pane':
-			return execZellijAction(buildPaneArgs(action));
+			return execPane(action);
 		case 'tab':
-			return execZellijAction(buildTabArgs(action));
-		case 'zellij':
-			return execZellijAction(['action', ...action.args]);
+			return execTab(action);
+		case 'herdr':
+			return execHerdr(action.args);
 	}
 }
 
@@ -41,57 +42,125 @@ function execRun(cmd: string, cwd?: string): never {
 		else process.exit(code ?? 0);
 	});
 	child.on('error', (err) => {
-		console.error(`zellij-which-key: failed to spawn: ${err.message}`);
+		console.error(`terminal-which-key: failed to spawn: ${err.message}`);
 		process.exit(127);
 	});
 	// Block the event loop; child handlers will exit the process.
 	return new Promise<never>(() => {}) as never;
 }
 
-/* ----------------------------------------------------------------- zellij */
+/* ------------------------------------------------------------------ herdr */
 
-function execZellijAction(args: string[]): never {
-	const result = spawnSync('zellij', args, {
+function execHerdr(args: string[]): never {
+	const result = spawnSync('herdr', args, {
 		stdio: 'inherit',
 		env: process.env,
 	});
 	if (result.error) {
 		console.error(
-			`zellij-which-key: failed to invoke zellij: ${result.error.message}`,
+			`terminal-which-key: failed to invoke herdr: ${result.error.message}`,
 		);
 		process.exit(127);
 	}
 	process.exit(result.status ?? 0);
 }
 
-function buildPaneArgs(a: PaneAction): string[] {
-	// `zellij action new-pane [-f] [-c] [-n NAME] [--cwd CWD] [-d DIR] -- sh -c CMD`
-	const args = ['action', 'new-pane'];
-	if (a.floating) args.push('--floating');
-	if (a.close_on_exit ?? true) args.push('--close-on-exit');
-	if (a.name) args.push('--name', a.name);
-	if (a.cwd) args.push('--cwd', a.cwd);
-	if (a.direction) args.push('--direction', a.direction);
-	args.push('--', 'sh', '-c', a.cmd);
-	return args;
+function execPane(a: PaneAction): never {
+	// herdr pane split doesn't accept a trailing command, so we split
+	// (inheriting the current tab), capture the new pane id from the JSON
+	// output, then `herdr pane run <id> <cmd>` to fire the command.
+	//
+	// The user's popup which-key pane is closing at the same moment, so we
+	// target the split at the current pane (which lives on some tab); the
+	// split lands in that tab and stays open even after our popup dies.
+	const splitArgs = ['pane', 'split'];
+	if (a.direction) splitArgs.push('--direction', a.direction);
+	else splitArgs.push('--direction', 'down');
+	if (a.cwd) splitArgs.push('--cwd', a.cwd);
+	splitArgs.push('--focus');
+
+	const split = spawnSync('herdr', splitArgs, {
+		env: process.env,
+		encoding: 'utf8',
+	});
+	if (split.status !== 0) {
+		console.error(
+			`terminal-which-key: herdr pane split failed: ${split.stderr?.trim() ?? ''}`,
+		);
+		process.exit(split.status ?? 1);
+	}
+	const paneId = extractId(split.stdout);
+	if (!paneId) {
+		console.error(
+			`terminal-which-key: could not parse pane id from herdr pane split output`,
+		);
+		process.exit(1);
+	}
+	const run = spawnSync('herdr', ['pane', 'run', paneId, a.cmd], {
+		stdio: 'inherit',
+		env: process.env,
+	});
+	process.exit(run.status ?? 0);
 }
 
-function buildTabArgs(a: TabAction): string[] {
-	// `zellij action new-tab [--name NAME] [--cwd CWD] [--layout PATH]`
-	// Optionally followed by a command via `--` once supported.
-	const args = ['action', 'new-tab'];
-	if (a.name) args.push('--name', a.name);
+function execTab(a: TabAction): never {
+	const args = ['tab', 'create'];
 	if (a.cwd) args.push('--cwd', a.cwd);
-	if (a.layout) args.push('--layout', a.layout);
-	if (a.cmd) {
-		// `zellij action new-tab` doesn't accept a trailing command yet,
-		// so we fall back to creating the tab, then spawning a pane that
-		// runs the command (replacing the default pane in the new tab is
-		// trickier and varies by zellij version).
-		// For now, emit a clear error if `cmd` is set with no layout.
+	if (a.name) args.push('--label', a.name);
+	args.push('--focus');
+
+	const tab = spawnSync('herdr', args, {
+		env: process.env,
+		encoding: 'utf8',
+	});
+	if (tab.status !== 0) {
 		console.error(
-			`zellij-which-key: tab.cmd is not yet supported; use a layout file or open the command via a follow-up pane action`,
+			`terminal-which-key: herdr tab create failed: ${tab.stderr?.trim() ?? ''}`,
 		);
+		process.exit(tab.status ?? 1);
 	}
-	return args;
+	if (!a.cmd) process.exit(0);
+
+	// After creating a tab, herdr focuses it; its default pane is the new
+	// current pane. Run the command in that pane.
+	const cur = spawnSync('herdr', ['pane', 'current'], {
+		env: process.env,
+		encoding: 'utf8',
+	});
+	const paneId = extractId(cur.stdout);
+	if (!paneId) {
+		console.error(
+			`terminal-which-key: could not resolve new tab's pane id`,
+		);
+		process.exit(1);
+	}
+	const run = spawnSync('herdr', ['pane', 'run', paneId, a.cmd], {
+		stdio: 'inherit',
+		env: process.env,
+	});
+	process.exit(run.status ?? 0);
+}
+
+/** Pull an id/pane_id/tab_id out of herdr's JSON-ish CLI output. */
+function extractId(out: string | undefined): string | null {
+	if (!out) return null;
+	// Try full JSON parse first.
+	try {
+		const j = JSON.parse(out);
+		if (typeof j === 'string') return j;
+		if (j && typeof j === 'object') {
+			for (const k of ['pane_id', 'id', 'tab_id']) {
+				const v = (j as Record<string, unknown>)[k];
+				if (typeof v === 'string' && v.length > 0) return v;
+			}
+		}
+	} catch {
+		/* fall through */
+	}
+	// Fallback: regex sniff.
+	const m = out.match(/"(?:pane_id|tab_id|id)"\s*:\s*"([^"]+)"/);
+	if (m) return m[1];
+	const trimmed = out.trim();
+	if (/^[A-Za-z0-9._:-]+$/.test(trimmed)) return trimmed;
+	return null;
 }

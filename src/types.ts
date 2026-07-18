@@ -1,12 +1,12 @@
-// Configuration schema for zellij-which-key.
+// Configuration schema for terminal-which-key.
 //
 // The config is a tree of menus. Each node under `keys` is either a
 // **submenu** (has nested `keys`) or a **leaf** (has exactly one action
-// field: `run`, `pane`, `tab`, or `zellij`).
+// field: `run`, `pane`, `tab`, or `herdr`).
 //
 // Inspired by which-key.nvim's design: a leaf's rhs is a typed *action*
 // rather than just "exec a string". This lets us spawn into a new pane,
-// open a new tab, run arbitrary `zellij action` calls, etc., without
+// open a new tab, run arbitrary `herdr` CLI calls, etc., without
 // coupling everything to "replace the current pane".
 
 /* ---------------------------------------------------------------- actions */
@@ -18,7 +18,7 @@ export interface RunAction {
 	cwd?: string;
 }
 
-/** Open the command in a new zellij pane, then close the which-key pane. */
+/** Open the command in a new herdr pane, then close the which-key pane. */
 export interface PaneAction {
 	kind: 'pane';
 	cmd: string;
@@ -29,7 +29,7 @@ export interface PaneAction {
 	direction?: 'right' | 'down';
 }
 
-/** Open the command in a new zellij tab. */
+/** Open the command in a new herdr tab. */
 export interface TabAction {
 	kind: 'tab';
 	cmd?: string;
@@ -38,13 +38,13 @@ export interface TabAction {
 	layout?: string;
 }
 
-/** Run an arbitrary `zellij action <args>` command. */
-export interface ZellijAction {
-	kind: 'zellij';
+/** Run an arbitrary `herdr <args>` command. */
+export interface HerdrAction {
+	kind: 'herdr';
 	args: string[];
 }
 
-export type Action = RunAction | PaneAction | TabAction | ZellijAction;
+export type Action = RunAction | PaneAction | TabAction | HerdrAction;
 
 /* ---------------------------------------------------------------- entries */
 
@@ -95,6 +95,6 @@ export interface RawLeafEntry {
 	/** `tab: <cmd>` or `tab: { cmd?, name?, ... }` -> TabAction. */
 	tab?: string | Omit<TabAction, 'kind'>;
 
-	/** `zellij: [args...]` -> ZellijAction. */
-	zellij?: string[] | string;
+	/** `herdr: [args...]` -> HerdrAction. */
+	herdr?: string[] | string;
 }

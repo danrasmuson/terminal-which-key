@@ -1,49 +1,40 @@
-# Example zellij-which-key config.
-# Install to ~/.config/zellij-which-key/config.yaml
+# Example terminal-which-key config.
+# Install to ~/.config/terminal-which-key/config.yaml
 
 title: Leader
 
 keys:
-
-  # +---------------------------------------------------------+
-  # | "open" submenu                                          |
-  # +---------------------------------------------------------+
   o:
     label: open
     keys:
-      # `run` -> the floating which-key pane *becomes* the command.
-      # Best for full-screen TUIs that take over the pane.
       c:
         label: calendar
+        # `run` -> replace the popup pane with the command. When the
+        # command exits, herdr closes the temporary pane it created for
+        # the leader launcher.
         run: calendar-tui
 
-      # `pane` -> spawn the command in a NEW zellij pane via
-      # `zellij action new-pane`, then close the which-key pane.
+      # `pane` -> spawn the command in a NEW herdr pane (split from the
+      # underlying tab), then close the which-key popup.
       l:
-        label: lazygit (floating)
+        label: lazygit
         pane:
           cmd: lazygit
-          floating: true
+          direction: down
 
-      # `tab` -> open a new zellij tab. `cmd` is not supported yet (zellij
-      # CLI limitation); use a layout file or follow with a `pane` action.
+      # `tab` -> open a new herdr tab.
       t:
-        label: terminal tab
+        label: htop in new tab
         tab:
-          name: scratch
+          name: htop
+          cmd: htop
 
-  # +---------------------------------------------------------+
-  # | zellij navigation via raw `zellij action` calls         |
-  # +---------------------------------------------------------+
+  # ------------------------------------------------------------------
+  # | herdr navigation via raw `herdr` CLI calls                      |
+  # ------------------------------------------------------------------
   z:
-    label: zellij
+    label: herdr
     keys:
       d:
         label: detach
-        zellij: [detach]
-      n:
-        label: next tab
-        zellij: [go-to-next-tab]
-      p:
-        label: previous tab
-        zellij: [go-to-previous-tab]
+        herdr: [session, detach]
