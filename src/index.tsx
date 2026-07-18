@@ -8,7 +8,8 @@ import App from './App.js';
 import { dispatch } from './actions.js';
 import { loadConfig, resolveConfigPath, ConfigError } from './config.js';
 import { renderDemo } from './demo.js';
-import type { Action } from './types.js';
+import type { Action, Entry, SubmenuEntry } from './types.js';
+import { isSubmenu } from './types.js';
 
 process.on('unhandledRejection', (error) => {
 	console.error('Unhandled promise rejection:', error);
@@ -48,6 +49,8 @@ Options:
   --demo PATH     Print the menu at PATH (e.g. "" for root, "o" for the
                   "open" submenu) as ANSI to stdout and exit. Used by the
                   screenshot script.
+  --path PATH     Start the interactive launcher already descended into the
+                  submenu at PATH (e.g. "w" opens the "workspace" submenu).
   -h, --help      Show this help
 
 Env:
@@ -60,6 +63,7 @@ Config format: see README.
 interface Args {
 	configPath?: string;
 	demoPath?: string[];
+	startPath?: string[];
 }
 
 function parseArgs(argv: string[]): Args {
@@ -77,6 +81,10 @@ function parseArgs(argv: string[]): Args {
 			out.demoPath = (argv[++i] ?? '').split('').filter(Boolean);
 		} else if (a.startsWith('--demo=')) {
 			out.demoPath = a.slice('--demo='.length).split('').filter(Boolean);
+		} else if (a === '--path') {
+			out.startPath = (argv[++i] ?? '').split('').filter(Boolean);
+		} else if (a.startsWith('--path=')) {
+			out.startPath = a.slice('--path='.length).split('').filter(Boolean);
 		} else {
 			console.error(`unknown argument: ${a}`);
 			process.exit(2);
@@ -85,8 +93,24 @@ function parseArgs(argv: string[]): Args {
 	return out;
 }
 
+/** Validate that `path` descends only through submenus in `config`. */
+function validateSubmenuPath(
+	config: { keys: Record<string, Entry> },
+	path: string[],
+): string | null {
+	let menu: SubmenuEntry = { keys: config.keys };
+	for (let i = 0; i < path.length; i++) {
+		const k = path[i];
+		const entry = menu.keys[k];
+		if (!entry) return `no entry for key ${JSON.stringify(k)} at path ${JSON.stringify(path.slice(0, i + 1).join(''))}`;
+		if (!isSubmenu(entry)) return `entry at ${JSON.stringify(path.slice(0, i + 1).join(''))} is a leaf, not a submenu`;
+		menu = entry;
+	}
+	return null;
+}
+
 async function main() {
-	const { configPath, demoPath } = parseArgs(process.argv.slice(2));
+	const { configPath, demoPath, startPath } = parseArgs(process.argv.slice(2));
 
 	let config;
 	try {
@@ -105,11 +129,20 @@ async function main() {
 		process.exit(0);
 	}
 
+	if (startPath && startPath.length > 0) {
+		const err = validateSubmenuPath(config, startPath);
+		if (err) {
+			console.error(`terminal-which-key: --path invalid: ${err}`);
+			process.exit(2);
+		}
+	}
+
 	let chosen: { action: Action; path: string[] } | null = null;
 
 	const app = render(
 		<App
 			config={config}
+			initialPath={startPath}
 			onSelect={(leaf) => {
 				chosen = leaf;
 			}}

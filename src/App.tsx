@@ -7,6 +7,12 @@ interface AppProps {
 	config: Config;
 	/** Called when the user selects a leaf. The app unmounts after this fires. */
 	onSelect: (leaf: { action: Action; path: string[] }) => void;
+	/**
+	 * Optional pre-descended path. When set, the app opens at this submenu
+	 * instead of the root — used by `--path` to bind separate hotkeys to
+	 * specific submenus (e.g. `prefix+w` -> workspace submenu).
+	 */
+	initialPath?: string[];
 }
 
 interface MenuRow {
@@ -23,10 +29,10 @@ function entriesOf(menu: { keys: Record<string, Entry> }): MenuRow[] {
 	}));
 }
 
-export default function App({ config, onSelect }: AppProps) {
+export default function App({ config, onSelect, initialPath }: AppProps) {
 	const { exit } = useApp();
 	// Path of keys descended into; [] means at root.
-	const [path, setPath] = useState<string[]>([]);
+	const [path, setPath] = useState<string[]>(initialPath ?? []);
 	const [flash, setFlash] = useState<string | null>(null);
 
 	// Walk to the current menu.
